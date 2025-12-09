@@ -1,5 +1,3 @@
-// Utility to generate IDs safely in both browser and server environments
-
 const generateId = (): string => {
   if (typeof globalThis !== 'undefined' && 'crypto' in globalThis) {
     const cryptoObj = globalThis.crypto as Crypto;

@@ -1,11 +1,11 @@
 'use client';
 
 import type { FC, FormEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Loader2, Send, User } from 'lucide-react';
 import generateId from './generateId';
 
-type Role = 'user' | 'assistant';
+type Role = 'user' | 'assistant' | 'system';
 
 interface ChatMessage {
   id: string;
@@ -14,11 +14,19 @@ interface ChatMessage {
   createdAt: string;
 }
 
+type Provider = 'openai' | 'gemini';
+
+interface ApiResponse {
+  message?: ChatMessage;
+  error?: string;
+}
+
 const Home: FC = function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<Provider>('openai');
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -27,57 +35,69 @@ const Home: FC = function Home() {
     }
   }, [messages, isLoading]);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    setError(null);
+  const handleSubmit = useCallback(
+    async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+      e.preventDefault();
+      setError(null);
 
-    const trimmed: string = input.trim();
-    if (!trimmed || isLoading) return;
+      const trimmed = input.trim();
+      if (!trimmed || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: generateId(),
-      role: 'user',
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-    };
+      const userMessage: ChatMessage = {
+        id: generateId(),
+        role: 'user',
+        content: trimmed,
+        createdAt: new Date().toISOString(),
+      };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
+      setMessages((prev) => [...prev, userMessage]);
+      setInput('');
+      setIsLoading(true);
 
-    try {
-      const res: Response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages,
-          prompt: trimmed,
-        }),
-      });
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            provider,
+            messages: [...messages, userMessage],
+          }),
+        });
 
-      if (!res.ok) {
-        let errorText = `Request failed with status ${res.status}`;
+        let data: ApiResponse | null = null;
+
         try {
-          const data = (await res.json()) as { error?: string };
-          if (data.error) errorText = data.error;
+          data = (await res.json()) as ApiResponse;
         } catch {
-          // ignore JSON parsing error
+          // ignore parse error, keep generic error below
         }
-        throw new Error(errorText);
-      }
 
-      const data = (await res.json()) as { message: ChatMessage };
-      setMessages((prev) => [...prev, data.message]);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Something went wrong while contacting /api/chat'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        if (!res.ok) {
+          throw new Error(
+            data?.error ??
+              `Request failed with status ${res.status}`
+          );
+        }
+
+        if (!data?.message) {
+          throw new Error('No message returned from the LLM API');
+        }
+
+        setMessages((prev) => [...prev, data!.message]);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Something went wrong while contacting the chat API'
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [input, isLoading, messages, provider]
+  );
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-4">
@@ -92,13 +112,30 @@ const Home: FC = function Home() {
                 mini
               </h1>
               <p className="text-xs text-slate-400">
-                your personal AI chat assistant
+                ChatGPT / Gemini style assistant
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]" />
-            <span>mock LLM connected</span>
+          <div className="flex items-center gap-3 text-xs text-slate-300">
+            <label className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1">
+              <span className="text-[11px] text-slate-400">Provider</span>
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as Provider)}
+                className="bg-transparent text-xs focus:outline-none"
+              >
+                <option className="bg-slate-900" value="openai">
+                  OpenAI
+                </option>
+                <option className="bg-slate-900" value="gemini">
+                  Gemini
+                </option>
+              </select>
+            </label>
+            <div className="flex items-center gap-1 text-[11px] text-slate-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]" />
+              <span>LLM connected</span>
+            </div>
           </div>
         </header>
 
@@ -108,16 +145,20 @@ const Home: FC = function Home() {
               <div className="mb-4 flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800">
                 <Bot className="h-8 w-8 text-emerald-400" />
               </div>
-              <h2 className="text-lg font-semibold mb-1">Welcome to mini</h2>
+              <h2 className="text-lg font-semibold mb-1">
+                Welcome to mini
+              </h2>
               <p className="text-sm max-w-md">
-                Ask anything and mini will respond using a mock AI. Later you
-                can easily connect a real LLM like OpenAI or Gemini.
+                This is a simple ChatGPT / Gemini style interface. Choose a
+                provider, type a prompt, and get AI responses.
               </p>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-300 w-full max-w-md">
                 <button
                   type="button"
                   onClick={() =>
-                    setInput('Explain what a large language model is in simple terms.')
+                    setInput(
+                      'Explain what a large language model is in simple terms.'
+                    )
                   }
                   className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-left hover:border-emerald-400/60 transition-all duration-200"
                 >
@@ -126,7 +167,9 @@ const Home: FC = function Home() {
                 <button
                   type="button"
                   onClick={() =>
-                    setInput('Give me 3 project ideas to learn Next.js and TypeScript.')
+                    setInput(
+                      'Give me 3 project ideas to learn Next.js and TypeScript.'
+                    )
                   }
                   className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-left hover:border-emerald-400/60 transition-all duration-200"
                 >
@@ -135,11 +178,13 @@ const Home: FC = function Home() {
                 <button
                   type="button"
                   onClick={() =>
-                    setInput('Help me design the architecture for an AI chat app.')
+                    setInput(
+                      'Act as a senior engineer and review my web app architecture.'
+                    )
                   }
                   className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-left hover:border-emerald-400/60 transition-all duration-200"
                 >
-                  Design an AI chat app
+                  Review my architecture
                 </button>
               </div>
             </div>
@@ -154,7 +199,9 @@ const Home: FC = function Home() {
             >
               <div
                 className={`flex max-w-[90%] md:max-w-[80%] gap-2 ${
-                  msg.role === 'user' ? 'flex-row-reverse text-right' : 'flex-row'
+                  msg.role === 'user'
+                    ? 'flex-row-reverse text-right'
+                    : 'flex-row'
                 }`}
               >
                 <div
@@ -177,7 +224,9 @@ const Home: FC = function Home() {
                       ? 'bg-sky-500/10 border border-sky-500/40 text-sky-50'
                       : 'bg-slate-800/80 border border-slate-700 text-slate-100'
                   }`}
-                  aria-label={msg.role === 'user' ? 'User message' : 'Assistant message'}
+                  aria-label={
+                    msg.role === 'user' ? 'User message' : 'Assistant message'
+                  }
                 >
                   {msg.content}
                 </article>
