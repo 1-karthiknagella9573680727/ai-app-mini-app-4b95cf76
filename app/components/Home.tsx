@@ -1,9 +1,9 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
-import type { FC } from 'react';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
-import generateId from './components/generateId';
+import type { FC, FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Bot, Loader2, Send, User } from 'lucide-react';
+import generateId from './generateId';
 
 type Role = 'user' | 'assistant';
 
@@ -34,25 +34,25 @@ const Home: FC = function Home() {
     const trimmed: string = input.trim();
     if (!trimmed || isLoading) return;
 
-    // Add user message locally
     const userMessage: ChatMessage = {
       id: generateId(),
       role: 'user',
       content: trimmed,
       createdAt: new Date().toISOString(),
     };
+
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res: Response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages, // history (without the just-added one, which is fine for demo)
+          messages,
           prompt: trimmed,
         }),
       });
@@ -63,7 +63,7 @@ const Home: FC = function Home() {
           const data = (await res.json()) as { error?: string };
           if (data.error) errorText = data.error;
         } catch {
-          // ignore JSON parse error, keep generic message
+          // ignore JSON parsing error
         }
         throw new Error(errorText);
       }
@@ -71,11 +71,8 @@ const Home: FC = function Home() {
       const data = (await res.json()) as { message: ChatMessage };
       setMessages((prev) => [...prev, data.message]);
     } catch (err) {
-      console.error('Chat request error:', err);
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Something went wrong while contacting /api/chat'
+        err instanceof Error ? err.message : 'Something went wrong while contacting /api/chat'
       );
     } finally {
       setIsLoading(false);
