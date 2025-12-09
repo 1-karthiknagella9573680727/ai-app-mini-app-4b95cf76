@@ -13,6 +13,19 @@ interface ChatMessage {
   createdAt: string;
 }
 
+const generateId = (): string => {
+  if (typeof globalThis !== 'undefined' && 'crypto' in globalThis) {
+    const cryptoObj = globalThis.crypto as Crypto;
+    if ('randomUUID' in cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+      return cryptoObj.randomUUID();
+    }
+  }
+
+  const randomPart: string = Math.random().toString(16).slice(2);
+  const timePart: string = Date.now().toString(16);
+  return `${timePart}-${randomPart}`;
+};
+
 const Home: FC = function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState<string>('');
@@ -36,7 +49,7 @@ const Home: FC = function Home() {
     }
 
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       role: 'user',
       content: trimmed,
       createdAt: new Date().toISOString(),
