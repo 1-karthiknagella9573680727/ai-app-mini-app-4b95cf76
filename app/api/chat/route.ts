@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import generateId from '@/app/components/generateId';
 
 type Role = 'user' | 'assistant';
 
@@ -22,7 +23,9 @@ interface ChatErrorResponse {
   error: string;
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse<ChatSuccessResponse | ChatErrorResponse>> {
+export async function POST(
+  req: NextRequest
+): Promise<NextResponse<ChatSuccessResponse | ChatErrorResponse>> {
   try {
     const body = (await req.json()) as Partial<ChatRequestBody>;
 
@@ -46,7 +49,7 @@ Here is a simple analysis of your message:
 This is mini, a mock AI assistant. Replace the logic in /app/api/chat/route.ts with a real LLM API call (OpenAI, Gemini, etc.) to get smarter responses.`;
 
     const responseMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       role: 'assistant',
       content: replyContent,
       createdAt: new Date().toISOString(),
